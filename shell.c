@@ -145,9 +145,6 @@ int main(unused int argc, unused char *argv[]) {
   /* Please only print shell prompts when standard input is not a tty */
   if (shell_is_interactive)
     fprintf(stdout, "%d: ", line_num);
-    /* debugging */
-    // fprintf(stderr, "%d\n", shell_pgid);
-    /* end debugging */
 
   while (fgets(line, 4096, stdin)) {
     /* Split our line into words. */
@@ -156,22 +153,17 @@ int main(unused int argc, unused char *argv[]) {
     /* Find which built-in function to run. */
     int fundex = lookup(tokens_get_token(tokens, 0));
 
-
     if (fundex >= 0) {
       cmd_table[fundex].fun(tokens);
     } else {
-      /* REPLACE this to run commands as programs. */
       size_t argc = tokens_get_length(tokens);
       pid_t pid;
-      // unsigned int *background = 0;
       if (argc > 0) {
         /* Turn off interrupt handling */
         signal(SIGINT, SIG_IGN);
         signal(SIGSTOP, SIG_IGN);
         signal(SIGTTOU, SIG_IGN);
-        // fprintf(stderr, "%d\n", SIGINT);
-        // for (unsigned int sig = 0; sig < 32; sig++)
-        //   signal(sig, SIG_IGN);
+
         /* Fork */
         pid = fork();
         if (!pid) {
@@ -181,12 +173,12 @@ int main(unused int argc, unused char *argv[]) {
           signal(SIGINT, SIG_DFL);
           signal(SIGSTOP, SIG_DFL);
           signal(SIGTTOU, SIG_DFL);
-          // for (unsigned int sig = 0; sig < 32; sig++)
-          //   signal(sig, SIG_DFL);
+
           /* argv processing */
           char **argv = (char **) malloc((argc + 1) * sizeof(char*)); // allocate enough space for argc number of pointers... do I need to free each of these char*s too?
           for (unsigned int arg = 0; arg < argc; arg++) {
             argv[arg] = tokens_get_token(tokens, arg); 
+
             /* I/O redirection */
             if (argv[arg][0] == '>') {
               if (arg + 1 >= argc)
@@ -215,8 +207,6 @@ int main(unused int argc, unused char *argv[]) {
             }
             /* Background processes */
             if (argv[arg][0] == '&') {
-              /* background process */
-              // *background = 1;
               tcsetpgrp(shell_terminal, shell_pgid);
               argv[arg] = NULL;
               break;
@@ -232,16 +222,14 @@ int main(unused int argc, unused char *argv[]) {
             size_t path_len;
             static char resolved[4096];
           
-            // confstr explained on man page - https://linux.die.net/man/3/confstr
-            // strtok explained on tutorialspoint - https://www.tutorialspoint.com/c_standard_library/c_function_strtok.htm
+            /* confstr explained on man page - https://linux.die.net/man/3/confstr */
+            /* strtok explained on tutorialspoint - https://www.tutorialspoint.com/c_standard_library/c_function_strtok.htm */
             path_len = confstr(_CS_PATH, NULL, (size_t) 0);
-
             pathbuf = malloc(path_len);
             if (pathbuf == NULL)
               abort(); 
             confstr(_CS_PATH, pathbuf, path_len);
             pathtok = strtok(pathbuf, ":");
-
             while (pathtok != NULL) {
               memset(resolved, '\0', path_len);
               strcpy(resolved, pathtok);
@@ -254,38 +242,28 @@ int main(unused int argc, unused char *argv[]) {
           } else {
             execv(argv[0], (char * const*) argv);
           }
-
           /* Command not found */
           // fprintf(stderr, "No, Patrick, %s is not a valid command.\n", argv[0]);
           fprintf(stderr, "%s: command not found\n", argv[0]);
-
           free(argv);
           exit(0);
-
         } else {
           /* Need help understanding next two lines */
           /* We can only access status once no other process is trying to access?*/
-          int status; 
-          // wait(&status);
+          int status;
           size_t tokens_length = tokens_get_length(tokens);
           bool background = tokens_length > 1 && tokens_get_token(tokens, tokens_length-1)[0] == '&';
-          // fprintf(stderr, "bg : %d\n", background);
           if (background) {
-            // fprintf(stderr, "true: %d\n", background);
             waitpid(pid, &status, WNOHANG);
           } else {
-            // fprintf(stderr, "false: %d\n", background);
             waitpid(pid, &status, 0);
           }
           tcsetpgrp(shell_terminal, shell_pgid);
           signal(SIGINT, SIG_DFL);
           signal(SIGSTOP, SIG_DFL);
           signal(SIGTTOU, SIG_DFL);
-          // for (unsigned int sig = 0; sig < 32; sig++)
-          //   signal(sig, SIG_DFL);
         }
       }
-      // fprintf(stdout, "This shell doesn't know how to run programs.\n");
     }
 
     if (shell_is_interactive)
